@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "aafc": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
