@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:local": "env-cmd -f .env.development next dev",
     "build": "next build",
+    "build:prod": "env-cmd -f .env.production next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -24,6 +26,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^25.5.0",
+    "env-cmd": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4"

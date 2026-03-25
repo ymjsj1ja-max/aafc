@@ -178,10 +178,24 @@ export const db = getDatabase(app);
 
 ## 🔐 환경변수 설정
 
-프로젝트 루트에 `.env.local` 파일을 생성해야 합니다 (`.gitignore`에 의해 git에 포함되지 않음).
+환경별로 다른 환경변수를 사용합니다. 각 파일을 프로젝트 루트에 생성하세요 (`.gitignore`에 의해 git에 포함되지 않음).
+
+### 1. 로컬 개발용 (`.env.development`)
+`npm run dev` 실행 시 로컬에서만 사용됩니다. Firebase 없이 LocalStorage로 개발하고 싶을 때 사용합니다.
 
 ```env
-# Firebase 모드 활성화 (false = LocalStorage 모드)
+# LocalStorage 모드 (false = LocalStorage)
+NEXT_PUBLIC_USE_FIREBASE=false
+
+# 관리자 비밀번호 SHA-256 해시 (기본: 0000)
+NEXT_PUBLIC_ADMIN_PASSWORD_HASH=5a8fdda3b8ee67ab5f8747a3cddcd7228e42278cb74e5de8c5d8094931986bed
+```
+
+### 2. Firebase 호스팅용 (`.env.production`)
+`npm run build` 실행 시 빌드 결과물에 포함되며, Firebase Hosting 배포 시 사용됩니다.
+
+```env
+# Firebase 모드 활성화 (true = Firebase)
 NEXT_PUBLIC_USE_FIREBASE=true
 
 # Firebase SDK 설정값
@@ -194,16 +208,15 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=<sender-id>
 NEXT_PUBLIC_FIREBASE_APP_ID=<app-id>
 
 # 관리자 비밀번호 SHA-256 해시
-# 기본 비밀번호: 0000
 NEXT_PUBLIC_ADMIN_PASSWORD_HASH=<sha256-hash>
 ```
 
-### 환경변수 동작 방식
+### 환경변수 우선순위
+Next.js에서 사용하는 환경변수 로딩 순서는 다음과 같습니다.
+1. `npm run dev` → `.env.development` 사용 (단, `.env.local`이 있으면 최우선!)
+2. `npm run build` → `.env.production` 사용 (단, `.env.local`이 있으면 최우선!)
 
-| 변수 | 값 | 동작 |
-|------|-----|------|
-| `NEXT_PUBLIC_USE_FIREBASE` | `true` | Firebase Realtime DB 사용 (배포 모드) |
-| `NEXT_PUBLIC_USE_FIREBASE` | `false` 또는 미설정 | LocalStorage 사용 (개발 모드) |
+> ⚠️ **주의**: `.env.local` 파일은 모든 환경(`.development`, `.production`)보다 우선순위가 높습니다. 로컬에서 특정 변수를 모든 경우에 공통으로 강제하고 싶을 때만 사용하세요.
 
 ### 관리자 비밀번호 변경
 

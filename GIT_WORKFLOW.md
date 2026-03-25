@@ -55,15 +55,30 @@ git branch
    git push origin main
    ```
 
+
 ---
 
-## 💡 유의사항
+## 4. Firebase Hosting에 배포하기 (Deploy)
 
-- **충돌(Conflict)**: 만약 `main`과 `develop`에서 같은 파일의 같은 부분을 수정했다면 충돌이 발생할 수 있습니다. 이 경우 에디터에서 코드를 정리한 후 다시 `add`와 `commit`을 해주세요.
-- **다시 작업하러 가기**: `main`에 성공적으로 합쳤다면 다시 `develop`으로 돌아가 다음 작업을 이어가세요.
-  ```bash
-  git checkout develop
-  ```
+`main` 브랜치에 코드를 합쳤다면, 이제 실제 웹사이트(호스팅)에 반영할 차례입니다.
+
+### 📋 배포 단계
+
+1. **최신 코드 빌드**:
+   Next.js 프로젝트를 정적 파일로 변환합니다.
+   ```bash
+   npm run build
+   ```
+   *성공하면 프로젝트 폴더에 `out` 폴더가 생성되거나 업데이트됩니다.*
+
+2. **Firebase 배포**:
+   빌드된 파일을 호스팅 서버로 업로드합니다.
+   ```bash
+   firebase deploy --only hosting
+   ```
+
+3. **확인**:
+   명령어 실행 결과로 나온 `Hosting URL`에 접속하여 변경 사항이 반영되었는지 확인하세요.
 
 ---
 

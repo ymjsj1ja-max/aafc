@@ -307,13 +307,26 @@ firebase apps:sdkconfig WEB 1:123456789:web:abcdef123456 --project aafc-reservat
 }
 ```
 
-### 5-3. .env.local 파일 생성
+### 5-3. 환경변수 파일 분리 생성
 
-프로젝트 루트에 `.env.local` 파일을 **새로 만들기** (이 파일은 git에 안 올라감):
+프로젝트 루트에 아래와 같이 2가지 파일을 **직접 생성**합니다 (git 자동 제외):
+
+#### 1) 로컬 개발용 (`.env.development`)
+- `npm run dev` 실행 시 적용됩니다. 
+- `NEXT_PUBLIC_USE_FIREBASE=false`로 설정하여 LocalStorage 기반으로 작업합니다.
+
+```env
+NEXT_PUBLIC_USE_FIREBASE=false
+# 관리자 비밀번호 SHA-256 해시 (기본: 0000)
+NEXT_PUBLIC_ADMIN_PASSWORD_HASH=5a8fdda3b8ee67ab5f8747a3cddcd7228e42278cb74e5de8c5d8094931986bed
+```
+
+#### 2) 서비스 빌드용 (`.env.production`)
+- `npm run build` 실행 시 적용되며, Firebase Hosting에 배포될 설정입니다.
+- `NEXT_PUBLIC_USE_FIREBASE=true`와 실제 Firebase 설정값을 넣습니다.
 
 ```env
 NEXT_PUBLIC_USE_FIREBASE=true
-
 # Firebase 설정 — 위 SDK config 출력값으로 채우기
 NEXT_PUBLIC_FIREBASE_API_KEY=여기에-apiKey-값
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=여기에-authDomain-값
@@ -324,8 +337,11 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=여기에-messagingSenderId-값
 NEXT_PUBLIC_FIREBASE_APP_ID=여기에-appId-값
 
 # 관리자 비밀번호 SHA-256 해시 (기본: 0000)
-NEXT_PUBLIC_ADMIN_PASSWORD_HASH=9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0
+NEXT_PUBLIC_ADMIN_PASSWORD_HASH=5a8fdda3b8ee67ab5f8747a3cddcd7228e42278cb74e5de8c5d8094931986bed
 ```
+
+### ⚠️ 주의사항
+`next build`는 `.env.production`를 불러오지만, 만약 프로젝트 루트에 `.env.local`이 존재하면 그 값이 **우선순위가 가장 높으므로** 빌드 시 주의하십시오.
 
 ### 5-4. 관리자 비밀번호 변경 (선택)
 
