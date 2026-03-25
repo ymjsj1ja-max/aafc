@@ -28,7 +28,13 @@ function FormContent() {
   // 각 타입별 입력 폼 상태: { [group]: [{ grade, name }] }
   const [forms, setForms] = useState(() => {
     const initial = {};
-    selectedTypes.forEach(g => { initial[g] = [{ grade: '', name: '' }]; });
+    selectedTypes.forEach(g => {
+      if (g === '아버지' || g === '어머니') {
+        initial[g] = [{ role: '참관', name: '' }];
+      } else {
+        initial[g] = [{ grade: '', name: '' }];
+      }
+    });
     return initial;
   });
 
@@ -37,9 +43,12 @@ function FormContent() {
   }, []);
 
   const addRow = (group) => {
+    const newRow = (group === '아버지' || group === '어머니')
+      ? { role: '참관', name: '' }
+      : { grade: '', name: '' };
     setForms(prev => ({
       ...prev,
-      [group]: [...prev[group], { grade: '', name: '' }],
+      [group]: [...prev[group], newRow],
     }));
   };
 
@@ -87,7 +96,12 @@ function FormContent() {
         const rows = forms[group] || [];
         const entries = rows
           .filter(r => r.name.trim())
-          .map(r => ({ grade: r.grade, name: r.name.trim() }));
+          .map(r => {
+            if (group === '아버지' || group === '어머니') {
+              return { grade: r.role || '참관', name: r.name.trim() };
+            }
+            return { grade: r.grade, name: r.name.trim() };
+          });
         if (entries.length) entriesByGroup[group] = entries;
       }
       await addReservations(entriesByGroup);
@@ -202,8 +216,21 @@ function FormContent() {
                       key={idx}
                       className="flex gap-2 items-center animate-in fade-in slide-in-from-top-2 duration-200"
                     >
-                      {/* 학년 드롭다운 (부모님 반이 아닌 경우만 표시) */}
-                      {group !== '아버지' && group !== '어머니' && (
+                      {/* 학년 드롭다운 / 참관-참여 드롭다운 */}
+                      {(group === '아버지' || group === '어머니') ? (
+                        <Select
+                          value={row.role || '참관'}
+                          onValueChange={(val) => updateRow(group, idx, 'role', val)}
+                        >
+                          <SelectTrigger className="w-28 shrink-0 h-11 text-sm font-medium">
+                            <SelectValue placeholder="선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="참관" className="text-sm">참관</SelectItem>
+                            <SelectItem value="참여" className="text-sm">참여</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
                         <Select
                           value={row.grade}
                           onValueChange={(val) => updateRow(group, idx, 'grade', val)}
