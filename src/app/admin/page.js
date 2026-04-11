@@ -13,6 +13,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import Link from 'next/link';
+import CurrentDate from '@/components/CurrentDate';
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
@@ -137,7 +138,8 @@ export default function AdminPage() {
           </Link>
           <div className="flex items-center gap-2">
             <span className="text-sm">🔑</span>
-            <span className="font-black text-slate-900 tracking-tighter text-sm">관리자 패널</span>
+            <span className="font-black text-slate-900 tracking-tighter text-sm mr-2">관리자 패널</span>
+            <CurrentDate />
           </div>
           <button
             onClick={() => { setAuthed(false); setPassword(''); }}
@@ -219,15 +221,23 @@ export default function AdminPage() {
                         <span className="text-xs text-slate-400 font-bold ml-1">명</span>
                       </div>
                     </div>
-                    {/* 현황 바 */}
                     <div className="mt-2 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-white/60 rounded-full overflow-hidden">
+                      <div className="flex-1 h-3 bg-white/60 rounded-full overflow-hidden border border-slate-200/50 p-[1px]">
                         <div
                           className={`h-full ${colors.bg} rounded-full transition-all duration-500`}
-                          style={{ width: `${cap > 0 ? Math.min(100, (reservations.length / cap) * 100) : 0}%` }}
+                          style={{ width: `${cap > 0 ? Math.min(100, (Math.min(cap, reservations.length) / cap) * 100) : 0}%` }}
                         />
                       </div>
-                      <span className="text-xs font-black text-slate-500">{reservations.length}/{cap}</span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-xs font-black text-slate-500">
+                          정원 {Math.min(cap, reservations.length)}/{cap}
+                        </span>
+                        {reservations.length > cap && (
+                          <span className="text-[10px] font-bold text-amber-500">
+                            대기 +{reservations.length - cap}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -237,23 +247,36 @@ export default function AdminPage() {
                       <p className="text-slate-300 text-sm font-bold text-center py-2">예약자 없음</p>
                     ) : (
                       <div className="space-y-2">
-                        {reservations.map((r, idx) => (
-                          <div key={idx} className="flex items-center justify-between group">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-400 font-bold w-5 text-right">{idx + 1}.</span>
-                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${colors.badge}`}>
-                                {r.grade}
-                              </span>
-                              <span className="text-sm font-bold text-slate-700">{r.name}</span>
-                            </div>
-                            <button
-                              onClick={() => handleRemoveOne(group, idx)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all text-lg font-bold w-6 h-6 flex items-center justify-center"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
+                          {reservations.map((r, idx) => {
+                            const isWaiting = idx >= cap;
+                            return (
+                              <div key={idx} className={`flex items-center justify-between group p-1.5 rounded-lg transition-colors ${isWaiting ? 'bg-amber-50/50' : ''}`}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-400 font-bold w-5 text-right">{idx + 1}.</span>
+                                  {isWaiting && (
+                                    <span className="text-[10px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded-md">대기</span>
+                                  )}
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isWaiting ? 'bg-amber-100 text-amber-700' : colors.badge}`}>
+                                    {r.grade}
+                                  </span>
+                                  <span className="text-sm font-bold text-slate-700">
+                                    {r.name}
+                                    {(r.parentName || r.childName) && (
+                                      <span className="text-slate-400 font-medium ml-1">
+                                        ({r.parentName || r.childName})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveOne(group, idx)}
+                                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all text-lg font-bold w-6 h-6 flex items-center justify-center"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            );
+                          })}
                       </div>
                     )}
                   </div>

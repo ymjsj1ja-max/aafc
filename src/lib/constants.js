@@ -1,4 +1,5 @@
 export const GROUPS = ['하이반', '미들반', '루키반', '아버지', '어머니'];
+export const WAITING_CAPACITY = 3;
 
 export const GRADE_OPTIONS = [
   '4살', '5살', '6살', '7살',

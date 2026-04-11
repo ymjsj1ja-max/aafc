@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { GROUPS, INITIAL_DATA } from '@/lib/constants';
 
@@ -40,7 +42,7 @@ function notifyAll(data) {
  * 그 외에는 LocalStorage + 인메모리 이벤트 버스로 동작.
  */
 export function useReservationData() {
-  const [data, setData] = useState(() => lsRead());
+  const [data, setData] = useState(INITIAL_DATA);
   const [loading, setLoading] = useState(true);
   const unsubRef = useRef(null);
 
@@ -110,13 +112,20 @@ export function useReservationData() {
     if (!USE_FIREBASE) {
       const current = lsRead();
       const updated = { ...current };
+      const processedEntriesByGroup = {};
+      
       Object.entries(entriesByGroup).forEach(([group, entries]) => {
+        const withIds = entries.map(ent => ({
+          ...ent,
+          id: `reg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        }));
+        processedEntriesByGroup[group] = withIds;
         const prev = updated[group]?.reservations || [];
-        updated[group] = { ...updated[group], reservations: [...prev, ...entries] };
+        updated[group] = { ...updated[group], reservations: [...prev, ...withIds] };
       });
       lsWrite(updated);
       notifyAll(updated);
-      return;
+      return processedEntriesByGroup;
     }
     // Firebase: 최신 데이터 읽어서 merge 후 set
     const { ref, get, set } = await import('firebase/database');
@@ -125,11 +134,22 @@ export function useReservationData() {
     const latest = snapshot.exists() ? snapshot.val() : {};
     const newData = { ...INITIAL_DATA };
     GROUPS.forEach(g => { if (latest[g]) newData[g] = { ...latest[g] }; });
+    
+    // ID가 포함된 새로운 항목들 생성
+    const processedEntriesByGroup = {};
     Object.entries(entriesByGroup).forEach(([group, entries]) => {
+      processedEntriesByGroup[group] = entries.map(ent => ({
+        ...ent,
+        id: `reg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      }));
+    });
+
+    Object.entries(processedEntriesByGroup).forEach(([group, entries]) => {
       const prev = newData[group]?.reservations || [];
       newData[group] = { ...newData[group], reservations: [...prev, ...entries] };
     });
     await set(ref(db, 'aafc'), newData);
+    return processedEntriesByGroup; // 생성된 ID 포함 데이터 반환
   }, []);
 
   /** 모든 예약자 삭제 (정원은 유지) */
@@ -148,10 +168,11 @@ export function useReservationData() {
     await set(ref(db, 'aafc'), resetData);
   }, []);
 
-  /** 특정 그룹의 특정 인덱스 예약자 삭제 */
-  const removeReservation = useCallback(async (group, idx, currentReservations) => {
-    const next = [...currentReservations];
-    next.splice(idx, 1);
+  /** 특정 그룹의 특정 ID 예약자 삭제 */
+  const removeReservation = useCallback(async (group, reservationId, currentReservations) => {
+    const next = currentReservations.filter(r => r.id !== reservationId);
+    if (next.length === currentReservations.length) return; // 이미 삭제되었거나 ID 불일치
+
     if (!USE_FIREBASE) {
       const current = lsRead();
       const updated = { ...current, [group]: { ...current[group], reservations: next } };

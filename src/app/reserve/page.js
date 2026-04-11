@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useReservationData } from '@/lib/useReservationData';
-import { GROUPS, GROUP_COLORS } from '@/lib/constants';
+import { GROUPS, GROUP_COLORS, WAITING_CAPACITY } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -56,7 +56,8 @@ export default function ReservePage() {
             const groupData = data[group] || { capacity: 15, reservations: [] };
             const count = (groupData.reservations || []).length;
             const cap = groupData.capacity;
-            const isFull = count >= cap;
+            const isWaitlist = count >= cap && count < cap + WAITING_CAPACITY;
+            const isFull = count >= cap + WAITING_CAPACITY;
             const isSelected = selected.includes(group);
             const colors = GROUP_COLORS[group];
 
@@ -95,8 +96,10 @@ export default function ReservePage() {
                     <div className={`text-sm font-black ${isFull ? 'text-red-500' : 'text-slate-500'}`}>
                       {count} / {cap}
                     </div>
-                    {isFull && (
+                    {isFull ? (
                       <div className="text-[10px] font-black text-red-400 uppercase">FULL</div>
+                    ) : isWaitlist && (
+                      <div className="text-[10px] font-black text-amber-500 uppercase">대기 접수 중</div>
                     )}
                   </div>
                 </div>

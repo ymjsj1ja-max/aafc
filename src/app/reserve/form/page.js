@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useReservationData } from '@/lib/useReservationData';
-import { GROUPS, GRADE_OPTIONS, GROUP_COLORS } from '@/lib/constants';
+import { GROUPS, GRADE_OPTIONS, GROUP_COLORS, WAITING_CAPACITY } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import Link from 'next/link';
+import CurrentDate from '@/components/CurrentDate';
 
 function FormContent() {
   const searchParams = useSearchParams();
@@ -25,14 +26,14 @@ function FormContent() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // 각 타입별 입력 폼 상태: { [group]: [{ grade, name }] }
+  // 각 타입별 입력 폼 상태: { [group]: [{ grade, name, parentName, childName, level }] }
   const [forms, setForms] = useState(() => {
     const initial = {};
     selectedTypes.forEach(g => {
       if (g === '아버지' || g === '어머니') {
-        initial[g] = [{ role: '참관', name: '' }];
+        initial[g] = [{ role: '참관', name: '', childName: '', level: '' }];
       } else {
-        initial[g] = [{ grade: '', name: '' }];
+        initial[g] = [{ grade: '', name: '', parentName: '' }];
       }
     });
     return initial;
@@ -43,9 +44,19 @@ function FormContent() {
   }, []);
 
   const addRow = (group) => {
+    const groupData = dbData[group] || { capacity: 15, reservations: [] };
+    const currentCount = (groupData.reservations || []).length;
+    const currentFormRows = forms[group]?.length || 0;
+    const maxAllowedOverall = groupData.capacity + WAITING_CAPACITY;
+    
+    if (currentCount + currentFormRows >= maxAllowedOverall) {
+      alert(`[${group}] 은(는) 대기 명단(3명)을 포함하여 총 ${maxAllowedOverall}명까지만 신청 가능합니다.`);
+      return;
+    }
+
     const newRow = (group === '아버지' || group === '어머니')
-      ? { role: '참관', name: '' }
-      : { grade: '', name: '' };
+      ? { role: '참관', name: '', childName: '', level: '' }
+      : { grade: '', name: '', parentName: '' };
     setForms(prev => ({
       ...prev,
       [group]: [...prev[group], newRow],
@@ -66,8 +77,14 @@ function FormContent() {
       const rows = [...prev[group]];
       rows[idx] = {
         ...rows[idx],
-        [field]: field === 'name' ? value.replace(/\s/g, '') : value,
+        [field]: (field === 'name' || field === 'parentName' || field === 'childName') 
+          ? value.replace(/\s/g, '') 
+          : value,
       };
+      // 참여 -> 참관 변경 시 레벨 초기화
+      if (field === 'role' && value === '참관') {
+        rows[idx].level = '';
+      }
       return { ...prev, [group]: rows };
     });
   };
@@ -82,10 +99,36 @@ function FormContent() {
         return;
       }
       for (const r of rows) {
-        if (r.name.trim() && !r.grade && group !== '아버지' && group !== '어머니') {
-          alert(`[${group}] 이름을 입력한 행에 학년을 선택해주세요.`);
-          return;
+        if (r.name.trim()) {
+          if (group === '아버지' || group === '어머니') {
+            if (r.role === '참여' && !r.level) {
+              alert(`[${group}] 참여 시 뛸 반(하이/미들/루키)을 선택해주세요.`);
+              return;
+            }
+            if (!r.childName.trim()) {
+              alert(`[${group}] 동명이인 방지를 위해 자녀 이름을 입력해주세요.`);
+              return;
+            }
+          } else {
+            if (!r.grade) {
+              alert(`[${group}] 학년을 선택해주세요.`);
+              return;
+            }
+            if (!r.parentName.trim()) {
+              alert(`[${group}] 동명이인 방지를 위해 부모님 성함을 입력해주세요.`);
+              return;
+            }
+          }
         }
+      }
+
+      // 최종 인원 초과 검증 (Capacity + 3)
+      const groupData = dbData[group] || { capacity: 15, reservations: [] };
+      const currentCount = (groupData.reservations || []).length;
+      const newEntriesCount = rows.filter(r => r.name.trim()).length;
+      if (currentCount + newEntriesCount > groupData.capacity + WAITING_CAPACITY) {
+        alert(`[${group}] 신청 중 인원이 가득 찼습니다 (최대 ${groupData.capacity + WAITING_CAPACITY}명).`);
+        return;
       }
     }
 
@@ -98,13 +141,29 @@ function FormContent() {
           .filter(r => r.name.trim())
           .map(r => {
             if (group === '아버지' || group === '어머니') {
-              return { grade: r.role || '참관', name: r.name.trim() };
+              return { 
+                grade: r.role === '참여' ? `${r.role}(${r.level})` : r.role, 
+                name: r.name.trim(),
+                childName: r.childName.trim()
+              };
             }
-            return { grade: r.grade, name: r.name.trim() };
+            return { 
+              grade: r.grade, 
+              name: r.name.trim(),
+              parentName: r.parentName.trim()
+            };
           });
         if (entries.length) entriesByGroup[group] = entries;
       }
-      await addReservations(entriesByGroup);
+      const addedEntries = await addReservations(entriesByGroup);
+      
+      // Deletion lock: Use localStorage to allow deletion even after closing the browser
+      if (typeof window !== 'undefined' && addedEntries) {
+        const myIds = JSON.parse(localStorage.getItem('aafc_my_reservations') || '[]');
+        const newIds = Object.values(addedEntries).flatMap(groupEntries => groupEntries.map(e => e.id));
+        localStorage.setItem('aafc_my_reservations', JSON.stringify([...myIds, ...newIds]));
+      }
+
       setSubmitted(true);
     } catch (err) {
       console.error(err);
@@ -154,7 +213,9 @@ function FormContent() {
             <span className="text-sm font-bold">반 선택으로</span>
           </Link>
           <span className="font-black text-slate-900 tracking-tighter">⚽ AA FC</span>
-          <div className="w-16" />
+          <div className="w-24 flex justify-end">
+            <CurrentDate />
+          </div>
         </div>
       </header>
 
@@ -172,7 +233,8 @@ function FormContent() {
             const groupData = dbData[group] || { capacity: 15, reservations: [] };
             const currentCount = (groupData.reservations || []).length;
             const cap = groupData.capacity;
-            const isFull = currentCount >= cap;
+            const isWaitlist = currentCount >= cap && currentCount < cap + WAITING_CAPACITY;
+            const isFull = currentCount >= cap + WAITING_CAPACITY;
             const colors = GROUP_COLORS[group];
             const rows = forms[group] || [{ grade: '', name: '' }];
 
@@ -193,9 +255,13 @@ function FormContent() {
                         </span>
                         {' '}/ {cap}명
                       </span>
-                      {isFull && (
+                      {isFull ? (
                         <span className="text-[10px] font-black text-red-500 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
                           FULL
+                        </span>
+                      ) : isWaitlist && (
+                        <span className="text-[10px] font-black text-amber-500 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
+                          대기 접수 중
                         </span>
                       )}
                     </div>
@@ -211,73 +277,112 @@ function FormContent() {
 
                 {/* 입력 행들 */}
                 <div className="p-5 space-y-3">
-                  {rows.map((row, idx) => (
-                    <div
-                      key={idx}
-                      className="flex gap-2 items-center animate-in fade-in slide-in-from-top-2 duration-200"
-                    >
-                      {/* 학년 드롭다운 / 참관-참여 드롭다운 */}
-                      {(group === '아버지' || group === '어머니') ? (
-                        <Select
-                          value={row.role || '참관'}
-                          onValueChange={(val) => updateRow(group, idx, 'role', val)}
-                        >
-                          <SelectTrigger className="w-28 shrink-0 h-11 text-sm font-medium">
-                            <SelectValue placeholder="선택" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="참관" className="text-sm">참관</SelectItem>
-                            <SelectItem value="참여" className="text-sm">참여</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Select
-                          value={row.grade}
-                          onValueChange={(val) => updateRow(group, idx, 'grade', val)}
-                        >
-                          <SelectTrigger className="w-40 shrink-0 h-11 text-sm font-medium">
-                            <SelectValue placeholder="학년 선택" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {GRADE_OPTIONS.map(g => (
-                              <SelectItem key={g} value={g} className="text-sm">{g}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
+                    {rows.map((row, idx) => (
+                      <div
+                        key={idx}
+                        className="space-y-2 pb-4 border-b border-slate-50 last:border-0 last:pb-0 animate-in fade-in slide-in-from-top-2 duration-200"
+                      >
+                        <div className="flex gap-2 items-center">
+                          {/* 1층: 학년/역할 및 이름 */}
+                          {(group === '아버지' || group === '어머니') ? (
+                            <Select
+                              value={row.role || '참관'}
+                              onValueChange={(val) => updateRow(group, idx, 'role', val)}
+                            >
+                              <SelectTrigger className="w-24 shrink-0 h-11 text-sm font-medium">
+                                <SelectValue placeholder="선택" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="참관" className="text-sm">참관</SelectItem>
+                                <SelectItem value="참여" className="text-sm">참여</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Select
+                              value={row.grade}
+                              onValueChange={(val) => updateRow(group, idx, 'grade', val)}
+                            >
+                              <SelectTrigger className="w-32 shrink-0 h-11 text-sm font-medium">
+                                <SelectValue placeholder="학년 선택" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {GRADE_OPTIONS.map(g => (
+                                  <SelectItem key={g} value={g} className="text-sm">{g}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
 
-                      {/* 이름 입력 */}
-                      <Input
-                        type="text"
-                        placeholder="이름 (띄어쓰기 자동 제거)"
-                        value={row.name}
-                        onChange={(e) => updateRow(group, idx, 'name', e.target.value)}
-                        className="flex-1 h-11 text-sm font-medium"
-                      />
+                          <Input
+                            type="text"
+                            placeholder="성함 (띄어쓰기 제거)"
+                            value={row.name}
+                            onChange={(e) => updateRow(group, idx, 'name', e.target.value)}
+                            className="flex-1 h-11 text-sm font-medium"
+                          />
 
-                      {/* 행 삭제 버튼 */}
-                      {rows.length > 1 && (
-                        <button
-                          onClick={() => removeRow(group, idx)}
-                          className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-50 text-slate-300 hover:bg-red-50 hover:text-red-400 transition-all duration-150 text-lg font-bold shrink-0"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                          {/* 행 삭제 버튼 (1층 끝에 배치) */}
+                          {rows.length > 1 && (
+                            <button
+                              onClick={() => removeRow(group, idx)}
+                              className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-50 text-slate-300 hover:bg-red-50 hover:text-red-400 transition-all duration-150 text-lg font-bold shrink-0"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+
+                        {/* 2층: 추가 정보 (참여 시 레벨, 동명이인 방지용 이름) */}
+                        <div className="flex gap-2 pl-1">
+                          {(group === '아버지' || group === '어머니') && row.role === '참여' && (
+                            <Select
+                              value={row.level}
+                              onValueChange={(val) => updateRow(group, idx, 'level', val)}
+                            >
+                              <SelectTrigger className="w-32 shrink-0 h-10 text-xs font-bold bg-blue-50 border-blue-100 text-blue-600">
+                                <SelectValue placeholder="뛸 반 선택" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="하이" className="text-xs">하이반</SelectItem>
+                                <SelectItem value="미들" className="text-xs">미들반</SelectItem>
+                                <SelectItem value="루키" className="text-xs">루키반</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                          
+                          <Input
+                            type="text"
+                            placeholder={ (group === '아버지' || group === '어머니') ? "자녀 이름 (동명이인 방지용)" : "부모님 성함 (동명이인 방지용)" }
+                            value={ (group === '아버지' || group === '어머니') ? row.childName : row.parentName }
+                            onChange={(e) => updateRow(group, idx, (group === '아버지' || group === '어머니') ? 'childName' : 'parentName', e.target.value)}
+                            className="flex-1 h-10 text-xs font-medium bg-slate-50/50 border-dashed"
+                          />
+                          {/* 삭제 버튼 공간 확보를 위한 더미 */}
+                          {rows.length > 1 && <div className="w-11 shrink-0" />}
+                        </div>
+                      </div>
+                    ))}
                 </div>
 
                 {/* 인원 추가하기 버튼 (타입별 중앙 하단) */}
-                <div className="px-5 pb-5 flex justify-center">
-                  <button
-                    onClick={() => addRow(group)}
-                    className={`flex items-center gap-2 text-sm font-black px-5 py-2.5 rounded-xl border-2 border-dashed
-                      ${colors.border} ${colors.text} ${colors.light} hover:opacity-80 transition-all duration-150`}
-                  >
-                    <span className="text-lg">+</span>
-                    인원 추가하기
-                  </button>
+                <div className="px-5 pb-5 flex flex-col items-center gap-2">
+                  {currentCount + rows.length < cap + WAITING_CAPACITY ? (
+                    <button
+                      onClick={() => addRow(group)}
+                      className={`flex items-center gap-2 text-sm font-black px-5 py-2.5 rounded-xl border-2 border-dashed
+                        ${colors.border} ${colors.text} ${colors.light} hover:opacity-80 transition-all duration-150`}
+                    >
+                      <span className="text-lg">+</span>
+                      인원 추가하기
+                    </button>
+                  ) : (
+                    <div className="text-[10px] font-black text-slate-400 bg-slate-50 px-3 py-2 rounded-xl border border-dashed border-slate-200">
+                      신청 가능 인원에 도달했습니다 (최대 18명)
+                    </div>
+                  )}
+                  {isWaitlist && !isFull && (
+                    <p className="text-[10px] font-bold text-amber-500">대기 명단으로 접수됩니다 (현재 15명 초과)</p>
+                  )}
                 </div>
               </div>
             );
