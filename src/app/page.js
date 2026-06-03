@@ -1,7 +1,7 @@
 'use client';
 
 import { useReservationData } from '@/lib/useReservationData';
-import { GROUPS, GROUP_COLORS, WAITING_CAPACITY } from '@/lib/constants';
+import { GROUPS, GROUP_COLORS } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -149,10 +149,9 @@ export default function HomePage() {
                   <div className="flex items-center gap-3">
                     <div className={`w-3 h-3 rounded-full ${colors.bg}`} />
                     <span className="font-black text-slate-800 text-lg">{group}</span>
-                    {count >= cap && (
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border
-                        ${isFull ? 'text-red-500 bg-red-50 border-red-100' : 'text-amber-500 bg-amber-50 border-amber-100'}`}>
-                        {isFull ? 'FULL' : '대기 접수 중'}
+                    {isFull && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full border text-red-500 bg-red-50 border-red-100">
+                        FULL
                       </span>
                     )}
                   </div>
@@ -177,10 +176,8 @@ export default function HomePage() {
                   <div className="flex flex-wrap gap-1.5">
                     {reservations.map((r, idx) => {
                         const isMine = r.id && myReservationIds.includes(r.id);
-                        const isWaiting = idx >= cap;
                         return (
-                          <span key={r.id || idx} className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${isWaiting ? 'bg-amber-100 text-amber-700' : colors.badge}`}>
-                            {isWaiting && <span className="text-[9px] bg-amber-500 text-white px-1 rounded-sm mr-0.5">대기</span>}
+                          <span key={r.id || idx} className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${colors.badge}`}>
                             {r.grade ? `${r.grade} ` : ''}{r.name}
                             {(r.parentName || r.childName) && (
                               <span className="opacity-60 font-medium ml-0.5">

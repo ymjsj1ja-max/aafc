@@ -232,11 +232,6 @@ export default function AdminPage() {
                         <span className="text-xs font-black text-slate-500">
                           정원 {Math.min(cap, reservations.length)}/{cap}
                         </span>
-                        {reservations.length > cap && (
-                          <span className="text-[10px] font-bold text-amber-500">
-                            대기 +{reservations.length - cap}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -248,15 +243,11 @@ export default function AdminPage() {
                     ) : (
                       <div className="space-y-2">
                           {reservations.map((r, idx) => {
-                            const isWaiting = idx >= cap;
                             return (
-                              <div key={idx} className={`flex items-center justify-between group p-1.5 rounded-lg transition-colors ${isWaiting ? 'bg-amber-50/50' : ''}`}>
+                              <div key={idx} className="flex items-center justify-between group p-1.5 rounded-lg transition-colors">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-slate-400 font-bold w-5 text-right">{idx + 1}.</span>
-                                  {isWaiting && (
-                                    <span className="text-[10px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded-md">대기</span>
-                                  )}
-                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isWaiting ? 'bg-amber-100 text-amber-700' : colors.badge}`}>
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${colors.badge}`}>
                                     {r.grade}
                                   </span>
                                   <span className="text-sm font-bold text-slate-700">

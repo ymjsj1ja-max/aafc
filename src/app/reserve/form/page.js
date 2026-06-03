@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useReservationData } from '@/lib/useReservationData';
-import { GROUPS, GRADE_OPTIONS, GROUP_COLORS, WAITING_CAPACITY } from '@/lib/constants';
+import { GROUPS, GRADE_OPTIONS, GROUP_COLORS } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -47,10 +47,10 @@ function FormContent() {
     const groupData = dbData[group] || { capacity: 15, reservations: [] };
     const currentCount = (groupData.reservations || []).length;
     const currentFormRows = forms[group]?.length || 0;
-    const maxAllowedOverall = groupData.capacity + WAITING_CAPACITY;
-    
+    const maxAllowedOverall = groupData.capacity;
+
     if (currentCount + currentFormRows >= maxAllowedOverall) {
-      alert(`[${group}] 은(는) 대기 명단(3명)을 포함하여 총 ${maxAllowedOverall}명까지만 신청 가능합니다.`);
+      alert(`[${group}] 은(는) 정원(${maxAllowedOverall}명)이 가득 찼습니다.`);
       return;
     }
 
@@ -126,8 +126,8 @@ function FormContent() {
       const groupData = dbData[group] || { capacity: 15, reservations: [] };
       const currentCount = (groupData.reservations || []).length;
       const newEntriesCount = rows.filter(r => r.name.trim()).length;
-      if (currentCount + newEntriesCount > groupData.capacity + WAITING_CAPACITY) {
-        alert(`[${group}] 신청 중 인원이 가득 찼습니다 (최대 ${groupData.capacity + WAITING_CAPACITY}명).`);
+      if (currentCount + newEntriesCount > groupData.capacity) {
+        alert(`[${group}] 신청 중 인원이 가득 찼습니다 (최대 ${groupData.capacity}명).`);
         return;
       }
     }
@@ -233,8 +233,7 @@ function FormContent() {
             const groupData = dbData[group] || { capacity: 15, reservations: [] };
             const currentCount = (groupData.reservations || []).length;
             const cap = groupData.capacity;
-            const isWaitlist = currentCount >= cap && currentCount < cap + WAITING_CAPACITY;
-            const isFull = currentCount >= cap + WAITING_CAPACITY;
+            const isFull = currentCount >= cap;
             const colors = GROUP_COLORS[group];
             const rows = forms[group] || [{ grade: '', name: '' }];
 
@@ -255,13 +254,9 @@ function FormContent() {
                         </span>
                         {' '}/ {cap}명
                       </span>
-                      {isFull ? (
+                      {isFull && (
                         <span className="text-[10px] font-black text-red-500 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
                           FULL
-                        </span>
-                      ) : isWaitlist && (
-                        <span className="text-[10px] font-black text-amber-500 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
-                          대기 접수 중
                         </span>
                       )}
                     </div>
@@ -366,7 +361,7 @@ function FormContent() {
 
                 {/* 인원 추가하기 버튼 (타입별 중앙 하단) */}
                 <div className="px-5 pb-5 flex flex-col items-center gap-2">
-                  {currentCount + rows.length < cap + WAITING_CAPACITY ? (
+                  {currentCount + rows.length < cap ? (
                     <button
                       onClick={() => addRow(group)}
                       className={`flex items-center gap-2 text-sm font-black px-5 py-2.5 rounded-xl border-2 border-dashed
@@ -377,11 +372,8 @@ function FormContent() {
                     </button>
                   ) : (
                     <div className="text-[10px] font-black text-slate-400 bg-slate-50 px-3 py-2 rounded-xl border border-dashed border-slate-200">
-                      신청 가능 인원에 도달했습니다 (최대 18명)
+                      신청 가능 인원에 도달했습니다 (최대 {cap}명)
                     </div>
-                  )}
-                  {isWaitlist && !isFull && (
-                    <p className="text-[10px] font-bold text-amber-500">대기 명단으로 접수됩니다 (현재 15명 초과)</p>
                   )}
                 </div>
               </div>
