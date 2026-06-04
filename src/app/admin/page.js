@@ -68,10 +68,10 @@ export default function AdminPage() {
     }
   };
 
-  const handleRemoveOne = async (group, idx) => {
+  const handleRemoveOne = async (group, id) => {
     if (!confirm(`이 예약자를 삭제하시겠습니까?`)) return;
     try {
-      await removeReservation(group, idx, data[group]?.reservations || []);
+      await removeReservation(group, id, data[group]?.reservations || []);
     } catch (e) {
       alert('삭제 실패');
     }
@@ -260,7 +260,7 @@ export default function AdminPage() {
                                   </span>
                                 </div>
                                 <button
-                                  onClick={() => handleRemoveOne(group, idx)}
+                                  onClick={() => handleRemoveOne(group, r.id)}
                                   className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all text-lg font-bold w-6 h-6 flex items-center justify-center"
                                 >
                                   ×
