@@ -27,7 +27,8 @@ export default function AdminPage() {
     isFirebase,
     updateGroup, 
     resetAllReservations, 
-    removeReservation 
+    removeReservation,
+    removeWaitlistEntry,
   } = useReservationData();
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -57,6 +58,25 @@ export default function AdminPage() {
     }
   };
 
+  const handleWaitlistCapacityChange = async (group, delta) => {
+    const current = data[group]?.waitlistCapacity ?? 5;
+    const next = Math.max(0, current + delta);
+    try {
+      await updateGroup(group, { waitlistCapacity: next });
+    } catch (e) {
+      alert('저장 실패. 네트워크를 확인하세요.');
+    }
+  };
+
+  const handleToggleWaitlist = async (group) => {
+    const current = data[group]?.waitlistEnabled ?? false;
+    try {
+      await updateGroup(group, { waitlistEnabled: !current });
+    } catch (e) {
+      alert('저장 실패. 네트워크를 확인하세요.');
+    }
+  };
+
   const handleResetAll = async () => {
     try {
       await resetAllReservations(data);
@@ -74,6 +94,15 @@ export default function AdminPage() {
       await removeReservation(group, id, data[group]?.reservations || []);
     } catch (e) {
       alert('삭제 실패');
+    }
+  };
+
+  const handleRemoveWaitlist = async (group, id) => {
+    if (!confirm(`이 대기자를 삭제하시겠습니까?`)) return;
+    try {
+      await removeWaitlistEntry(group, id, data[group]?.waitlist || []);
+    } catch (e) {
+      alert('대기자 삭제 실패');
     }
   };
 
@@ -164,7 +193,7 @@ export default function AdminPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-black text-slate-900 tracking-tighter">예약 관리</h2>
-            <p className="text-slate-400 text-sm">정원 조절 및 예약자 관리</p>
+            <p className="text-slate-400 text-sm">정원 · 대기 조절 및 예약자 관리</p>
           </div>
           <Button
             variant="destructive"
@@ -188,9 +217,12 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-4">
             {GROUPS.map((group) => {
-              const groupData = data[group] || { capacity: 15, reservations: [] };
+              const groupData = data[group] || { capacity: 15, reservations: [], waitlistCapacity: 5, waitlistEnabled: false, waitlist: [] };
               const reservations = groupData.reservations || [];
+              const waitlist = groupData.waitlist || [];
               const cap = groupData.capacity;
+              const waitlistCap = groupData.waitlistCapacity ?? 5;
+              const waitlistEnabled = groupData.waitlistEnabled ?? false;
               const colors = GROUP_COLORS[group];
 
               return (
@@ -221,6 +253,7 @@ export default function AdminPage() {
                         <span className="text-xs text-slate-400 font-bold ml-1">명</span>
                       </div>
                     </div>
+                    {/* 정원 프로그레스 바 */}
                     <div className="mt-2 flex items-center gap-2">
                       <div className="flex-1 h-3 bg-white/60 rounded-full overflow-hidden border border-slate-200/50 p-[1px]">
                         <div
@@ -234,20 +267,111 @@ export default function AdminPage() {
                         </span>
                       </div>
                     </div>
+
+                    {/* ── 대기 설정 영역 ── */}
+                    <div className="mt-3 pt-3 border-t border-white/60">
+                      <div className="flex items-center justify-between gap-3">
+                        {/* 대기 토글 버튼 */}
+                        <button
+                          onClick={() => handleToggleWaitlist(group)}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-black transition-all duration-200 border ${
+                            waitlistEnabled
+                              ? 'bg-amber-500 text-white border-amber-400 shadow-sm shadow-amber-200'
+                              : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-600'
+                          }`}
+                        >
+                          <span className="text-sm">{waitlistEnabled ? '⏳' : '🚫'}</span>
+                          대기 {waitlistEnabled ? '운영 중' : '숨김'}
+                        </button>
+
+                        {/* 대기 수량 조절 */}
+                        <div className={`flex items-center gap-2 bg-white rounded-xl px-3 py-1.5 border shadow-sm transition-opacity duration-200 ${waitlistEnabled ? 'border-amber-200 opacity-100' : 'border-slate-200 opacity-40 pointer-events-none'}`}>
+                          <span className="text-xs text-slate-400 font-bold mr-1">대기</span>
+                          <button
+                            onClick={() => handleWaitlistCapacityChange(group, -1)}
+                            className="w-7 h-7 rounded-lg bg-slate-50 text-amber-600 font-black text-lg flex items-center justify-center hover:bg-amber-50 transition-colors"
+                          >
+                            −
+                          </button>
+                          <span className="text-lg font-black w-8 text-center text-amber-600">{waitlistCap}</span>
+                          <button
+                            onClick={() => handleWaitlistCapacityChange(group, 1)}
+                            className="w-7 h-7 rounded-lg bg-slate-50 text-amber-600 font-black text-lg flex items-center justify-center hover:bg-amber-50 transition-colors"
+                          >
+                            +
+                          </button>
+                          <span className="text-xs text-slate-400 font-bold ml-1">명</span>
+                        </div>
+                      </div>
+
+                      {/* 대기 프로그레스 바 (대기 활성화 시에만) */}
+                      {waitlistEnabled && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-white/60 rounded-full overflow-hidden border border-amber-200/50 p-[1px]">
+                            <div
+                              className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                              style={{ width: `${waitlistCap > 0 ? Math.min(100, (waitlist.length / waitlistCap) * 100) : 0}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-black text-amber-600">
+                            대기 {waitlist.length}/{waitlistCap}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* 예약자 목록 */}
                   <div className="p-5">
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">예약자 목록</p>
                     {reservations.length === 0 ? (
                       <p className="text-slate-300 text-sm font-bold text-center py-2">예약자 없음</p>
                     ) : (
                       <div className="space-y-2">
-                          {reservations.map((r, idx) => {
-                            return (
-                              <div key={idx} className="flex items-center justify-between group p-1.5 rounded-lg transition-colors">
+                        {reservations.map((r, idx) => {
+                          return (
+                            <div key={idx} className="flex items-center justify-between group p-1.5 rounded-lg transition-colors hover:bg-slate-50">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-400 font-bold w-5 text-right">{idx + 1}.</span>
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${colors.badge}`}>
+                                  {r.grade}
+                                </span>
+                                <span className="text-sm font-bold text-slate-700">
+                                  {r.name}
+                                  {(r.parentName || r.childName) && (
+                                    <span className="text-slate-400 font-medium ml-1">
+                                      ({r.parentName || r.childName})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleRemoveOne(group, r.id)}
+                                className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all text-lg font-bold w-6 h-6 flex items-center justify-center"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* 대기자 목록 (대기 활성화 시에만) */}
+                    {waitlistEnabled && (
+                      <div className="mt-4 pt-4 border-t border-dashed border-amber-200">
+                        <p className="text-[11px] font-black text-amber-500 uppercase tracking-widest mb-2 flex items-center gap-1">
+                          <span>⏳</span> 대기자 목록
+                        </p>
+                        {waitlist.length === 0 ? (
+                          <p className="text-amber-200 text-sm font-bold text-center py-2">대기자 없음</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {waitlist.map((r, idx) => (
+                              <div key={idx} className="flex items-center justify-between group p-1.5 rounded-lg transition-colors hover:bg-amber-50">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-400 font-bold w-5 text-right">{idx + 1}.</span>
-                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${colors.badge}`}>
+                                  <span className="text-xs text-amber-400 font-black w-5 text-right">대{idx + 1}.</span>
+                                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
                                     {r.grade}
                                   </span>
                                   <span className="text-sm font-bold text-slate-700">
@@ -260,14 +384,15 @@ export default function AdminPage() {
                                   </span>
                                 </div>
                                 <button
-                                  onClick={() => handleRemoveOne(group, r.id)}
-                                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all text-lg font-bold w-6 h-6 flex items-center justify-center"
+                                  onClick={() => handleRemoveWaitlist(group, r.id)}
+                                  className="opacity-0 group-hover:opacity-100 text-amber-300 hover:text-red-400 transition-all text-lg font-bold w-6 h-6 flex items-center justify-center"
                                 >
                                   ×
                                 </button>
                               </div>
-                            );
-                          })}
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -284,8 +409,8 @@ export default function AdminPage() {
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-slate-900">모든 예약 삭제</DialogTitle>
             <DialogDescription className="text-slate-500">
-              모든 예약자 정보가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
-              <br />정원 수는 유지됩니다.
+              모든 예약자 및 대기자 정보가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+              <br />정원 수와 대기 설정은 유지됩니다.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 mt-2">

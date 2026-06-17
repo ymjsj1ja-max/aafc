@@ -15,7 +15,15 @@ function lsRead() {
     const parsed = JSON.parse(raw);
     // 누락된 그룹 채우기
     const merged = { ...INITIAL_DATA };
-    GROUPS.forEach(g => { if (parsed[g]) merged[g] = parsed[g]; });
+    GROUPS.forEach(g => {
+      if (parsed[g]) {
+        merged[g] = {
+          ...INITIAL_DATA[g],
+          ...parsed[g],
+          waitlist: parsed[g].waitlist || [],
+        };
+      }
+    });
     return merged;
   } catch {
     return { ...INITIAL_DATA };
@@ -67,7 +75,15 @@ export function useReservationData() {
         if (snapshot.exists()) {
           const val = snapshot.val();
           const merged = { ...INITIAL_DATA };
-          GROUPS.forEach(g => { if (val[g]) merged[g] = val[g]; });
+          GROUPS.forEach(g => {
+            if (val[g]) {
+              merged[g] = {
+                ...INITIAL_DATA[g],
+                ...val[g],
+                waitlist: val[g].waitlist || [],
+              };
+            }
+          });
           setData(merged);
         }
         setLoading(false);
@@ -105,6 +121,50 @@ export function useReservationData() {
     const { ref, update } = await import('firebase/database');
     const { db } = await import('@/lib/firebase');
     await update(ref(db, `aafc/${group}`), patch);
+  }, []);
+
+  /** 대기 추가: 여러 그룹에 한번에 waitlist entries 추가 */
+  const addWaitlistEntries = useCallback(async (entriesByGroup) => {
+    if (!USE_FIREBASE) {
+      const current = lsRead();
+      const updated = { ...current };
+      const processedEntriesByGroup = {};
+
+      Object.entries(entriesByGroup).forEach(([group, entries]) => {
+        const withIds = entries.map(ent => ({
+          ...ent,
+          id: `wait-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        }));
+        processedEntriesByGroup[group] = withIds;
+        const prev = updated[group]?.waitlist || [];
+        updated[group] = { ...updated[group], waitlist: [...prev, ...withIds] };
+      });
+      lsWrite(updated);
+      notifyAll(updated);
+      return processedEntriesByGroup;
+    }
+    // Firebase
+    const { ref, get, set } = await import('firebase/database');
+    const { db } = await import('@/lib/firebase');
+    const snapshot = await get(ref(db, 'aafc'));
+    const latest = snapshot.exists() ? snapshot.val() : {};
+    const newData = { ...INITIAL_DATA };
+    GROUPS.forEach(g => { if (latest[g]) newData[g] = { ...latest[g], waitlist: latest[g].waitlist || [] }; });
+
+    const processedEntriesByGroup = {};
+    Object.entries(entriesByGroup).forEach(([group, entries]) => {
+      processedEntriesByGroup[group] = entries.map(ent => ({
+        ...ent,
+        id: `wait-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      }));
+    });
+
+    Object.entries(processedEntriesByGroup).forEach(([group, entries]) => {
+      const prev = newData[group]?.waitlist || [];
+      newData[group] = { ...newData[group], waitlist: [...prev, ...entries] };
+    });
+    await set(ref(db, 'aafc'), newData);
+    return processedEntriesByGroup;
   }, []);
 
   /** 예약 추가: 여러 그룹에 한번에 entries 추가 */
@@ -152,11 +212,17 @@ export function useReservationData() {
     return processedEntriesByGroup; // 생성된 ID 포함 데이터 반환
   }, []);
 
-  /** 모든 예약자 삭제 (정원은 유지) */
+  /** 모든 예약자 삭제 (정원은 유지, 대기도 초기화) */
   const resetAllReservations = useCallback(async (currentData) => {
     const resetData = {};
     GROUPS.forEach(g => {
-      resetData[g] = { capacity: currentData[g]?.capacity || 15, reservations: [] };
+      resetData[g] = {
+        capacity: currentData[g]?.capacity || 15,
+        reservations: [],
+        waitlistCapacity: currentData[g]?.waitlistCapacity ?? 5,
+        waitlistEnabled: currentData[g]?.waitlistEnabled ?? false,
+        waitlist: [],
+      };
     });
     if (!USE_FIREBASE) {
       lsWrite(resetData);
@@ -166,6 +232,23 @@ export function useReservationData() {
     const { ref, set } = await import('firebase/database');
     const { db } = await import('@/lib/firebase');
     await set(ref(db, 'aafc'), resetData);
+  }, []);
+
+  /** 특정 그룹의 대기자 삭제 */
+  const removeWaitlistEntry = useCallback(async (group, entryId, currentWaitlist) => {
+    const next = currentWaitlist.filter(r => r.id !== entryId);
+    if (next.length === currentWaitlist.length) return;
+
+    if (!USE_FIREBASE) {
+      const current = lsRead();
+      const updated = { ...current, [group]: { ...current[group], waitlist: next } };
+      lsWrite(updated);
+      notifyAll(updated);
+      return;
+    }
+    const { ref, update } = await import('firebase/database');
+    const { db } = await import('@/lib/firebase');
+    await update(ref(db, `aafc/${group}`), { waitlist: next });
   }, []);
 
   /** 특정 그룹의 특정 ID 예약자 삭제 */
@@ -192,7 +275,9 @@ export function useReservationData() {
     writeData,
     updateGroup,
     addReservations,
+    addWaitlistEntries,
     resetAllReservations,
     removeReservation,
+    removeWaitlistEntry,
   };
 }

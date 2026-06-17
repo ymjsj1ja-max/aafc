@@ -8,11 +8,11 @@ export const GRADE_OPTIONS = [
 ];
 
 export const INITIAL_DATA = {
-  '하이반': { capacity: 15, reservations: [] },
-  '미들반': { capacity: 15, reservations: [] },
-  '루키반': { capacity: 15, reservations: [] },
-  '아버지': { capacity: 15, reservations: [] },
-  '어머니': { capacity: 15, reservations: [] },
+  '하이반': { capacity: 15, reservations: [], waitlistCapacity: 5, waitlistEnabled: false, waitlist: [] },
+  '미들반': { capacity: 15, reservations: [], waitlistCapacity: 5, waitlistEnabled: false, waitlist: [] },
+  '루키반': { capacity: 15, reservations: [], waitlistCapacity: 5, waitlistEnabled: false, waitlist: [] },
+  '아버지': { capacity: 15, reservations: [], waitlistCapacity: 5, waitlistEnabled: false, waitlist: [] },
+  '어머니': { capacity: 15, reservations: [], waitlistCapacity: 5, waitlistEnabled: false, waitlist: [] },
 };
 
 export const GROUP_COLORS = {

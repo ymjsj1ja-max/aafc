@@ -16,12 +16,12 @@ import {
 } from "@/components/ui/dialog";
 
 export default function HomePage() {
-  const { data, loading, isFirebase, removeReservation } = useReservationData();
+  const { data, loading, isFirebase, removeReservation, removeWaitlistEntry } = useReservationData();
   const [myReservationIds, setMyReservationIds] = useState([]);
   const [isMounted, setIsMounted] = useState(false);
   
   // 삭제 확인 다이얼로그 상태
-  const [deleteTarget, setDeleteTarget] = useState(null); // { group, idx, r }
+  const [deleteTarget, setDeleteTarget] = useState(null); // { group, idx, r, type: 'reservation' | 'waitlist' }
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
@@ -47,10 +47,14 @@ export default function HomePage() {
 
   const handleDeleteOwn = async () => {
     if (!deleteTarget) return;
-    const { group, r } = deleteTarget;
+    const { group, r, type } = deleteTarget;
     setIsDeleting(true);
     try {
-      await removeReservation(group, r.id, data[group]?.reservations || []);
+      if (type === 'waitlist') {
+        await removeWaitlistEntry(group, r.id, data[group]?.waitlist || []);
+      } else {
+        await removeReservation(group, r.id, data[group]?.reservations || []);
+      }
       const nextIds = myReservationIds.filter(id => id !== r.id);
       setMyReservationIds(nextIds);
       localStorage.setItem('aafc_my_reservations', JSON.stringify(nextIds));
@@ -64,6 +68,7 @@ export default function HomePage() {
 
   const totalReserved = GROUPS.reduce((acc, g) => acc + (data[g]?.reservations?.length || 0), 0);
   const totalCapacity = GROUPS.reduce((acc, g) => acc + (data[g]?.capacity || 0), 0);
+  const totalWaitlist = GROUPS.reduce((acc, g) => acc + (data[g]?.waitlist?.length || 0), 0);
 
   if (loading) {
     return (
@@ -125,19 +130,31 @@ export default function HomePage() {
           <p className="text-slate-500 text-sm font-medium">
             전체 예약{' '}
             <span className="font-black text-blue-600">{totalReserved}</span>명 / {totalCapacity}명
+            {totalWaitlist > 0 && (
+              <span className="ml-2">
+                · 대기 <span className="font-black text-amber-500">{totalWaitlist}</span>명
+              </span>
+            )}
           </p>
         </div>
 
         {/* 현황 카드 목록 */}
         <div className="space-y-3 mb-8">
           {GROUPS.map((group, i) => {
-            const groupData = data[group] || { capacity: 15, reservations: [] };
+            const groupData = data[group] || { capacity: 15, reservations: [], waitlistCapacity: 5, waitlistEnabled: false, waitlist: [] };
             const reservations = groupData.reservations || [];
+            const waitlist = groupData.waitlist || [];
             const count = reservations.length;
             const cap = groupData.capacity;
             const pct = cap > 0 ? Math.min(100, (count / cap) * 100) : 0;
             const isFull = count >= cap;
             const colors = GROUP_COLORS[group];
+
+            const waitlistEnabled = groupData.waitlistEnabled ?? false;
+            const waitlistCap = groupData.waitlistCapacity ?? 5;
+            const waitlistCount = waitlist.length;
+            const waitlistPct = waitlistCap > 0 ? Math.min(100, (waitlistCount / waitlistCap) * 100) : 0;
+            const waitlistAvailable = waitlistEnabled && isFull && waitlistCount < waitlistCap;
 
             return (
               <div
@@ -152,6 +169,11 @@ export default function HomePage() {
                     {isFull && (
                       <span className="text-[10px] font-black px-2 py-0.5 rounded-full border text-red-500 bg-red-50 border-red-100">
                         FULL
+                      </span>
+                    )}
+                    {waitlistAvailable && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full border text-amber-600 bg-amber-50 border-amber-200 animate-pulse">
+                        ⏳ 대기 가능
                       </span>
                     )}
                   </div>
@@ -189,7 +211,7 @@ export default function HomePage() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                setDeleteTarget({ group, idx, r });
+                                setDeleteTarget({ group, idx, r, type: 'reservation' });
                               }}
                               className="ml-1 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200/50 hover:bg-red-100 hover:text-red-500 transition-all font-black text-[14px] leading-none cursor-pointer relative z-20 shadow-sm"
                               title="본인 예약 삭제"
@@ -204,16 +226,79 @@ export default function HomePage() {
                 ) : (
                   <p className="text-xs text-slate-300 font-bold">아직 예약자가 없습니다</p>
                 )}
+
+                {/* ── 대기자 섹션 ── */}
+                {waitlistEnabled && isFull && (
+                  <div className="mt-3 pt-3 border-t border-dashed border-amber-200/60">
+                    {/* 대기 프로그레스 바 */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-1">
+                        <span>⏳</span> 대기
+                      </span>
+                      <div className="flex-1 h-1.5 bg-amber-50 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 rounded-full transition-all duration-700 ease-out"
+                          style={{ width: `${waitlistPct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-black text-amber-500">
+                        {waitlistCount}/{waitlistCap}
+                      </span>
+                    </div>
+
+                    {/* 대기자 명단 */}
+                    {waitlistCount > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {waitlist.map((r, idx) => {
+                          const isMine = r.id && myReservationIds.includes(r.id);
+                          return (
+                            <span key={r.id || idx} className="text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 bg-amber-100 text-amber-700">
+                              {r.grade ? `${r.grade} ` : ''}{r.name}
+                              {(r.parentName || r.childName) && (
+                                <span className="opacity-60 font-medium ml-0.5">
+                                  ({r.parentName || r.childName})
+                                </span>
+                              )}
+                              {isMine && isMounted && (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setDeleteTarget({ group, idx, r, type: 'waitlist' });
+                                  }}
+                                  className="ml-1 w-5 h-5 flex items-center justify-center rounded-full bg-amber-200/50 hover:bg-red-100 hover:text-red-500 transition-all font-black text-[14px] leading-none cursor-pointer relative z-20 shadow-sm"
+                                  title="본인 대기 삭제"
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-300 font-bold">아직 대기자가 없습니다</p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
 
-        {/* 예약하기 버튼 */}
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
+        {/* 예약하기 / 참여현황 버튼 */}
+        <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
           <Link href="/reserve">
             <Button className="w-full h-14 text-lg font-black rounded-2xl bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 hover:shadow-blue-300 transition-all duration-200 hover:-translate-y-0.5">
               ⚽ 예약하기
+            </Button>
+          </Link>
+          <Link href="/status">
+            <Button
+              variant="outline"
+              className="w-full h-12 text-base font-black rounded-2xl border-2 border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
+            >
+              📋 참여현황 보기
             </Button>
           </Link>
         </div>
@@ -225,13 +310,17 @@ export default function HomePage() {
         </footer>
       </main>
 
-      {/* 본인 예약 삭제 확인 다이얼로그 */}
+      {/* 본인 예약/대기 삭제 확인 다이얼로그 */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-xl font-black text-slate-900">예약 삭제</DialogTitle>
+            <DialogTitle className="text-xl font-black text-slate-900">
+              {deleteTarget?.type === 'waitlist' ? '대기 삭제' : '예약 삭제'}
+            </DialogTitle>
             <DialogDescription className="text-slate-500">
-              <span className="font-black text-blue-600">{deleteTarget?.r?.name}</span>님의 예약을 삭제하시겠습니까?
+              <span className={`font-black ${deleteTarget?.type === 'waitlist' ? 'text-amber-600' : 'text-blue-600'}`}>
+                {deleteTarget?.r?.name}
+              </span>님의 {deleteTarget?.type === 'waitlist' ? '대기' : '예약'}를 삭제하시겠습니까?
               <br />이 작업은 되돌릴 수 없습니다.
             </DialogDescription>
           </DialogHeader>
